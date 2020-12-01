@@ -12,31 +12,28 @@ class API(object):
 
     def __init__(self, base_url, token=None, proxies=""):
         requests.packages.urllib3.disable_warnings()
-
         token = check_token(token)
         self._proxies = proxies
-        self._header = {'Content-Type': 'application/json', 'PRIVATE-TOKEN': '{}'.format(token)}
+        self._header = {'Content-Type': 'application/json',
+                        'PRIVATE-TOKEN': '{}'.format(token)}
         self.base_url = base_url
 
     def get(self, url):
         lookup_url = self.base_url + url
         with requests.Session() as s:
-            response = s.get(lookup_url, proxies=self._proxies, headers=self._header, verify=False)
-
-            if response.status_code != 200:
-                raise ConnectionError("\nCan't get to the gitlab api \n"
-                                      "- check your token in GITLAB_TOKEN\n"
-                                      "- Check the URL, default is https://gitlab.com")
+            response = s.get(lookup_url, proxies=self._proxies,
+                             headers=self._header, verify=False)
+            if response.status_code >= 400:
+                print(f"Exception: {response.text}")
+                exit()
             return response
 
     def get_through_page(self, url, action, pages=1):
         results = []
         lookup_url = url + API.PER_PAGE
-
         for page in range(1, pages + 1):
             r = self.get(lookup_url.format(page))
             results.extend(action(r.json()))
-
         return results
 
     def get_all_projects(self, pages=3):
@@ -62,10 +59,13 @@ class API(object):
     def get_all_pipelines_info(self, project_id, pages=1):
         pipelines_info = []
         pipeline_list = self.get_all_pipelines_id(project_id, pages)
+        num_of_pipelines = len(pipeline_list)
 
-        for pipeline in pipeline_list:
+        for i, pipeline in enumerate(pipeline_list):
             lookup_url = API.A_PIPELINE_URL.format(project_id, pipeline)
-            pipelines_info.append(get_pipeline_info(self.get(lookup_url).json()))
+            pipelines_info.append(get_pipeline_info(
+                self.get(lookup_url).json()))
+            print(f"Completed: {i}/{num_of_pipelines}", end='\r')
 
         return pipelines_info
 
@@ -76,7 +76,10 @@ class API(object):
         return project
 
     def get_enhanced_project_info(self, project_id):
-        project = self.get_basic_project_info(project_id)
+        # project = self.get_basic_project_info(project_id)
+        project = self.get_all_pipelines_info(project_id)
+        dumping(project, "pipelines.json")
+        exit()
         enhanced_info = enhance_project_info(project)
 
         return enhanced_info

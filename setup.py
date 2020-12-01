@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-with open('README.rst') as file:
+with open('README.md') as file:
     long_description = file.read()
 
 setup(name='gitlab_stats',
@@ -19,11 +19,8 @@ setup(name='gitlab_stats',
       license='MIT',
       packages=find_packages(exclude=['docs', 'dist', 'build']),
       include_package_data=True,
-      install_requires=['requests'],
+      install_requires=['requests', 'pandas'],
       tests_require=['pytest'],
-      extras_require={
-          'test': ['coverage', 'pytest'],
-      },
       entry_points={
           'console_scripts': [
               'gitlab_stats = gitlab_stats.cli:main'

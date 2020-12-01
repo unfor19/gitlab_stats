@@ -1,19 +1,56 @@
-FROM python:3.6.6
+ARG PYTHON_VERSION="3.9.0"
+FROM python:$PYTHON_VERSION-slim as build
 
-ARG token
-ARG proxy
-ARG gitlab
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
-COPY . /app
-WORKDIR /app
+# Upgrade pip and then install build tools
+RUN pip install -U pip && \
+    pip install -U wheel setuptools wheel check-wheel-contents
 
-ENV GITLAB_TOKEN=$token
-ENV GITLAB_URL=$gitlab
-ENV HTTP_PROXY=$proxy
+WORKDIR /code/
 
-RUN pip install -r requirements.txt
-RUN python setup.py install
+# Build The Application and validate wheel contents
+COPY . .
+RUN python setup.py bdist_wheel && \
+    find dist/ -type f -name *.whl -exec check-wheel-contents {} \;
 
-# docker build -t gitlab_stats . --build-arg token="your token" --build-arg proxy="your proxy" --build-arg gitlab="gitlab url"
-# docker run -it exec gitlab_stats bash gitlab_stats project_id -u url -p proxy
+# For debugging the Build Stage    
+CMD ["bash"]
 
+
+
+## App Stage
+ARG PYTHON_VERSION="3.9.0"
+FROM python:$PYTHON_VERSION-slim as app
+
+# Define workdir
+ENV HOME="/app"
+WORKDIR $HOME
+
+# Define env vars
+ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PATH="$HOME/.local/bin:${PATH}"
+
+# Run as a non-root user
+RUN addgroup appgroup && useradd appuser -g appgroup --home-dir "$HOME" && \
+    chown -R appuser:appgroup .
+USER appuser
+
+# Upgrade pip
+RUN pip install --user --upgrade pip && \
+    pip install --user --upgrade wheel setuptools
+
+# Install requirements
+COPY --from=build /code/requirements.txt ./
+RUN pip install -r requirements.txt && \
+    rm requirements.txt
+
+# Copy artifacts and requirements.txt from Build Stage
+COPY --from=build /code/dist/ ./
+
+# Install the application from local wheel package
+RUN find . -type f -name *.whl -exec pip install --user {} \; -exec rm {} \;
+CMD ["gitlab_stats"]

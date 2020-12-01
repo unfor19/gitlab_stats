@@ -1,20 +1,18 @@
 import csv
 import datetime
 import os
-
+import json
 import gitlab_stats
-
-GITLAB_TOKEN_ENV = 'GITLAB_TOKEN'
+import pandas as pd
 
 
 def check_token(token):
     if token is None:
         try:
-            token = os.environ[GITLAB_TOKEN_ENV]
+            token = os.environ["GITLAB_TOKEN"]
         except KeyError:
             print("\nEnvironment variable containing your gitlab token could not be found"
                   "\nSet it using `export GITLAB_TOKEN=<your gitlab token>")
-
     return token
 
 
@@ -26,7 +24,6 @@ def get_name_and_id(project_dict):
     project_info = []
     for elem in project_dict:
         project_info.append({'id': elem['id'], 'name': elem['name']})
-
     return project_info
 
 
@@ -34,7 +31,6 @@ def get_pipelines_id(pipeline_dict):
     pipelines = []
     for elem in pipeline_dict:
         pipelines.append(elem['id'])
-
     return pipelines
 
 
@@ -59,8 +55,9 @@ def get_duration_moy(project_info):
 
 
 def get_success_percentage(project_info):
-    success = list((pipeline['status'] for pipeline in project_info['pipelines']))
-
+    success = list(
+        (pipeline['status'] for pipeline in project_info['pipelines'])
+    )
     return round(success.count('success') * 100 / len(success)) if len(success) else None
 
 
@@ -73,25 +70,29 @@ def get_pipeline_info_from(project_info, days=15):
         else:
             break
     project_info['pipelines'] = pipelines
-
     return project_info
 
 
 def enhance_project_info(project_info):
     project_info.update({'duration_moy': get_duration_moy(project_info)})
-    project_info.update({'duration_in_minutes': seconds_to_min(project_info['duration_moy'])})
-    project_info.update({'success_percentage': get_success_percentage(project_info)})
-
+    project_info.update(
+        {'duration_in_minutes': seconds_to_min(project_info['duration_moy'])})
+    project_info.update(
+        {'success_percentage': get_success_percentage(project_info)})
     project_info.pop('pipelines', None)
     return project_info
 
 
 def print_cli_report(project_info):
-    print(gitlab_stats.CLI_REPORT.format(project_info['name'],
-                                         project_info['id'],
-                                         datetime.date.today(),
-                                         project_info['duration_in_minutes'],
-                                         project_info['success_percentage']))
+    print(
+        gitlab_stats.CLI_REPORT.format(
+            project_info['name'],
+            project_info['id'],
+            datetime.date.today(),
+            project_info['duration_in_minutes'],
+            project_info['success_percentage']
+        )
+    )
 
 
 def generate_report(project_info, path='output.csv'):
@@ -112,3 +113,15 @@ def create_dict_to_csv(project_info, path):
         w = csv.DictWriter(f, project_info.keys())
         w.writeheader()
         w.writerow(project_info)
+
+
+def dumping(pipelines, project_id):
+
+    with open(f"stats-{project_id}.json", mode='w', encoding='utf-8') as fp:
+        json.dump(pipelines, fp, indent=4, sort_keys=True)
+
+    # create dataframe
+    df = pd.json_normalize(pipelines)
+
+    # save to csv
+    df.to_csv(f"stats-{project_id}.csv", index=False, encoding='utf-8')
